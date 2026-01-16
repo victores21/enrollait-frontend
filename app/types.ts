@@ -1,0 +1,43 @@
+export interface ProductsPagedResponse {
+	ok: boolean;
+	page: number;
+	page_size: number;
+	total: number;
+	total_pages: number;
+	items: ProductItem[];
+}
+
+export interface ProductItem {
+	id: number;
+	tenant_id: number;
+	moodle_course_id: number;
+
+	slug: string;
+	title: string;
+	description: string;
+	image_url: string;
+	badge?: string;
+
+	// Backend sends these as strings (e.g. "20.99")
+	price: string;
+	discounted_price: string | null;
+
+	price_cents: number;
+	currency: string; // could narrow to "usd" | "cop" etc later
+
+	is_published: boolean;
+
+	identifier: string | null;
+	stock_status: 'available' | 'unavailable' | 'out_of_stock' | string;
+
+	// It's a datetime string from backend
+	created_at: string;
+
+	categories?: Category[];
+}
+
+export interface Category {
+	id: number;
+	name: string;
+	slug: string;
+}
