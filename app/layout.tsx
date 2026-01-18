@@ -3,15 +3,15 @@ import { Geist, Geist_Mono, Inter } from 'next/font/google';
 import './globals.css';
 import Navbar from './components/Navbar';
 
-const geistSans = Geist({
-	variable: '--font-geist-sans',
-	subsets: ['latin'],
-});
+// const geistSans = Geist({
+// 	variable: '--font-geist-sans',
+// 	subsets: ['latin'],
+// });
 
-const geistMono = Geist_Mono({
-	variable: '--font-geist-mono',
-	subsets: ['latin'],
-});
+// const geistMono = Geist_Mono({
+// 	variable: '--font-geist-mono',
+// 	subsets: ['latin'],
+// });
 
 const inter = Inter({
 	variable: '--font-inter',
@@ -37,9 +37,7 @@ export default function RootLayout({
 		// 	</body>
 		// </html>
 		<html lang='en'>
-			<body
-				className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} antialiased`}
-			>
+			<body className={`${inter.variable} antialiased`}>
 				<div className='min-h-screen bg-[var(--background)] text-[var(--foreground)]'>
 					<Navbar />
 					<div className='mx-auto px-2 md:px-4 xl:px-0 max-w-[1300px]'>

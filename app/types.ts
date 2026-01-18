@@ -41,3 +41,23 @@ export interface Category {
 	name: string;
 	slug: string;
 }
+
+// use the same type your page returns (or make a shared type file)
+export type ProductForStripeCheckout = {
+	id: number;
+	tenant_id: number;
+	moodle_course_id: number;
+	slug: string;
+	title: string;
+	description: string;
+	image_url: string | null;
+	price: string;
+	discounted_price: string | null;
+	price_cents: number;
+	currency: string;
+	is_published: boolean;
+	identifier: string | null;
+	stock_status: string;
+	created_at: string;
+	categories?: { id: number; name: string; slug: string }[];
+};

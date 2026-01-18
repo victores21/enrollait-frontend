@@ -30,7 +30,7 @@ type ProductDetail = {
 	title: string;
 	description: string;
 	price: string;
-	image_url: string | null;
+	image_url: string;
 	discounted_price: string | null;
 	price_cents: number;
 	currency: string;
@@ -49,7 +49,7 @@ export default async function ProductPage({ params }: PageProps) {
 
 	// Fetch product detail
 	const data = await api<ProductDetailResponse>(
-		`/tenants/1/products/${productId}` +
+		`/products/${productId}` +
 			qs({
 				include_courses: true,
 				include_related: true,
@@ -166,8 +166,22 @@ export default async function ProductPage({ params }: PageProps) {
 
 					{/* Right (sticky card) */}
 					<aside className='lg:sticky lg:top-6 lg:self-start'>
-						<CoursePurchaseCard
+						{/* <CoursePurchaseCard
 							price={price}
+							oldPrice={oldPrice}
+							discountText={
+								oldPrice
+									? `${Math.round((1 - price / oldPrice) * 100)}% OFF`
+									: undefined
+							}
+							offerEnds={oldPrice ? 'Limited-time offer' : undefined}
+							preview={{
+								type: 'image',
+								src: product.image_url ?? '/placeholder.png',
+							}}
+						/> */}
+						<CoursePurchaseCard
+							product={product}
 							oldPrice={oldPrice}
 							discountText={
 								oldPrice

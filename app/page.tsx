@@ -16,7 +16,7 @@ export default async function Home({
 	const pageSize = 12;
 
 	const courses = await api<ProductsPagedResponse>(
-		`/tenants/1/products/paged` +
+		`/products/paged` +
 			qs({
 				page,
 				page_size: pageSize,
