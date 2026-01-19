@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic';
 
-import ProductCard from './components/ProductCard';
 import { api, qs } from '@/lib/api/api';
-import type { ProductsPagedResponse } from './types';
-import Pagination from './components/Pagination';
+import { ProductsPagedResponse } from '../types';
+import ProductCard from '../components/ProductCard';
+import Pagination from '../components/Pagination';
 
 export default async function Home({
 	searchParams,

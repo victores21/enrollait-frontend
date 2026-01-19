@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { CourseContentAccordion } from '@/app/components/CourseContentAccordion';
 import CoursePurchaseCard from '@/app/components/CoursePurchaseCard';
 import { api, qs } from '@/lib/api/api';
-import { FiCheck, FiStar } from 'react-icons/fi';
+import { FiCheck } from 'react-icons/fi';
 import type { Category } from '@/app/types'; // adjust if needed
 
 type PageProps = {

@@ -10,7 +10,16 @@ type Endpoint =
 			description?: string;
 			method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 			path: string; // relative to backend base URL
-			defaultBody?: unknown; // used when method supports body
+
+			// ✅ NEW: support JSON vs multipart endpoints
+			bodyType?: 'json' | 'multipart';
+
+			// used when bodyType === 'json'
+			defaultBody?: unknown;
+
+			// used when bodyType === 'multipart'
+			defaultForm?: Record<string, unknown>;
+			fileField?: string; // e.g. "image"
 	  }
 	| {
 			id: string;
@@ -33,6 +42,10 @@ function tryParseJson(text: string): { ok: boolean; value: any } {
 	}
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 export default function ApiTesterClient() {
 	// ✅ Add endpoints here (you can add many)
 	const endpoints: Endpoint[] = useMemo(
@@ -44,6 +57,7 @@ export default function ApiTesterClient() {
 				description: 'Tests Moodle token + URL connectivity',
 				method: 'POST',
 				path: '/integrations/moodle/test',
+				bodyType: 'json',
 				defaultBody: {
 					moodle_url: 'https://enrollait-test.moodlecloud.com/',
 					token: '702f0346160b164c85327a65a1d8910b',
@@ -56,6 +70,7 @@ export default function ApiTesterClient() {
 				description: 'Triggers Moodle course sync',
 				method: 'POST',
 				path: '/integrations/moodle/sync-courses',
+				bodyType: 'json',
 				defaultBody: {},
 			},
 			{
@@ -65,29 +80,122 @@ export default function ApiTesterClient() {
 				description: 'Triggers Moodle category sync',
 				method: 'POST',
 				path: '/integrations/moodle/sync-categories',
+				bodyType: 'json',
 				defaultBody: {},
 			},
+
+			// JSON create (your existing one)
+			// {
+			// 	id: 'products-create',
+			// 	type: 'api',
+			// 	name: 'Create Product (JSON)',
+			// 	description: 'Creates a product in the catalog (JSON version)',
+			// 	method: 'POST',
+			// 	path: '/products',
+			// 	bodyType: 'json',
+			// 	defaultBody: {
+			// 		slug: 'string',
+			// 		title: 'string',
+			// 		description: 'string',
+			// 		image_url: 'string',
+			// 		price: 0,
+			// 		discounted_price: 0,
+			// 		currency: 'usd',
+			// 		is_published: false,
+			// 		identifier: 'string',
+			// 		stock_status: 'available',
+			// 		moodle_course_id: 0,
+			// 		category_ids: [0],
+			// 	},
+			// },
+
+			// ✅ NEW: multipart create (matches your curl with -F and image upload)
+			// {
+			// 	id: 'products-create-multipart',
+			// 	type: 'api',
+			// 	name: 'Create Product (Multipart)',
+			// 	description:
+			// 		'Creates a product using multipart/form-data + image upload',
+			// 	method: 'POST',
+			// 	path: '/products',
+			// 	bodyType: 'multipart',
+			// 	fileField: 'image',
+			// 	defaultForm: {
+			// 		identifier: 'string',
+			// 		price: 'producto 3',
+			// 		discounted_price: 'string',
+			// 		slug: 'string',
+			// 		moodle_course_id: 0,
+			// 		currency: 'usd',
+			// 		category_ids: 'string',
+			// 		title: 'producto 2',
+			// 		is_published: false,
+			// 		stock_status: 'available',
+			// 		description: 'producto 2 des',
+			// 	},
+			// },
 			{
-				id: 'products-create',
+				id: 'products-create-json-course-ids',
 				type: 'api',
-				name: 'Create Product',
-				description: 'Creates a product in the catalog',
+				name: 'Create Product (JSON - course_ids)',
+				description:
+					'Creates a product using JSON body with course_ids + category_ids',
 				method: 'POST',
 				path: '/products',
+				bodyType: 'json',
 				defaultBody: {
-					slug: 'string',
 					title: 'string',
 					description: 'string',
 					image_url: 'string',
 					price: 0,
 					discounted_price: 0,
 					currency: 'usd',
-					is_published: false,
 					identifier: 'string',
 					stock_status: 'available',
-					moodle_course_id: 0,
+					course_ids: [0],
 					category_ids: [0],
 				},
+			},
+			{
+				id: 'products-create-multipart-course-ids',
+				type: 'api',
+				name: 'Create Product (Multipart - course_ids)',
+				description:
+					'Creates a product using multipart/form-data (supports image upload) with course_ids + category_ids',
+				method: 'POST',
+				path: '/products',
+				bodyType: 'multipart',
+				fileField: 'image',
+				defaultForm: {
+					identifier: '',
+					price: '',
+					discounted_price: '',
+					currency: 'usd',
+					course_ids: '',
+					category_ids: '',
+					title: '',
+					stock_status: 'available',
+					description: '',
+				},
+			},
+
+			{
+				id: 'products-paged',
+				type: 'api',
+				name: 'List Products (Paged)',
+				description:
+					'Gets paged products (published only) including categories',
+				method: 'GET',
+				path: '/products/paged?page=1&page_size=12&published_only=true&include_categories=true',
+			},
+			{
+				id: 'moodle-courses-list',
+				type: 'api',
+				name: 'List Moodle Courses (Synced)',
+				description:
+					'Lists courses from local courses table (synced from Moodle). Supports q + only_linked.',
+				method: 'GET',
+				path: '/integrations/moodle/courses?page=1&page_size=50&q=&only_linked=false',
 			},
 		],
 		[]
@@ -103,10 +211,17 @@ export default function ApiTesterClient() {
 	const backendBase =
 		process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
 
+	// ✅ NEW: file state for multipart endpoints
+	const [uploadFile, setUploadFile] = useState<File | null>(null);
+
 	const [bodyText, setBodyText] = useState(() => {
 		const first = endpoints[0];
-		if (first && first.type === 'api' && first.defaultBody !== undefined)
-			return prettyJson(first.defaultBody);
+		if (first && first.type === 'api') {
+			if (first.bodyType === 'multipart') {
+				return prettyJson(first.defaultForm ?? {});
+			}
+			if (first.defaultBody !== undefined) return prettyJson(first.defaultBody);
+		}
 		return '{\n  \n}';
 	});
 
@@ -133,14 +248,34 @@ export default function ApiTesterClient() {
 		setElapsedMs(null);
 		setResponseText('');
 		setResponseHeaders({});
+		setUploadFile(null);
 
 		const next = endpoints.find((e) => e.id === id);
 		if (next?.type === 'api') {
-			const nextBody =
-				next.defaultBody !== undefined
-					? prettyJson(next.defaultBody)
-					: '{\n  \n}';
-			setBodyText(nextBody);
+			// ✅ set body text based on endpoint type
+			if (next.bodyType === 'multipart') {
+				setBodyText(prettyJson(next.defaultForm ?? {}));
+
+				// ✅ IMPORTANT: do NOT set Content-Type manually for multipart (boundary!)
+				setHeadersText(
+					prettyJson({
+						accept: 'application/json',
+					})
+				);
+			} else {
+				const nextBody =
+					next.defaultBody !== undefined
+						? prettyJson(next.defaultBody)
+						: '{\n  \n}';
+				setBodyText(nextBody);
+
+				setHeadersText(
+					prettyJson({
+						accept: 'application/json',
+						'Content-Type': 'application/json',
+					})
+				);
+			}
 		}
 	}
 
@@ -156,12 +291,7 @@ export default function ApiTesterClient() {
 
 		// Parse headers JSON
 		const headersParsed = tryParseJson(headersText);
-		if (
-			!headersParsed.ok ||
-			typeof headersParsed.value !== 'object' ||
-			headersParsed.value === null ||
-			Array.isArray(headersParsed.value)
-		) {
+		if (!headersParsed.ok || !isPlainObject(headersParsed.value)) {
 			setLoading(false);
 			setError(
 				'Headers must be a valid JSON object, e.g. { "accept": "application/json" }'
@@ -171,16 +301,48 @@ export default function ApiTesterClient() {
 
 		const headersObj = headersParsed.value as Record<string, string>;
 
-		// Parse body JSON (only if method typically supports it)
-		let body: string | undefined = undefined;
+		// Build body
+		let body: BodyInit | undefined = undefined;
+
 		if (selected.method !== 'GET' && selected.method !== 'DELETE') {
-			const parsed = tryParseJson(bodyText);
-			if (!parsed.ok) {
-				setLoading(false);
-				setError('Body must be valid JSON.');
-				return;
+			if (selected.bodyType === 'multipart') {
+				const parsed = tryParseJson(bodyText);
+				if (!parsed.ok || !isPlainObject(parsed.value)) {
+					setLoading(false);
+					setError('Body must be a valid JSON object for multipart fields.');
+					return;
+				}
+
+				const fd = new FormData();
+				const formObj = parsed.value as Record<string, unknown>;
+
+				for (const [k, v] of Object.entries(formObj)) {
+					if (v === undefined || v === null) continue;
+
+					// If you want arrays here, you can change to append multiple times.
+					fd.append(k, typeof v === 'string' ? v : String(v));
+				}
+
+				const fileKey = selected.fileField || 'image';
+				if (uploadFile) {
+					fd.append(fileKey, uploadFile);
+				}
+
+				body = fd;
+
+				// ✅ Ensure we don't force a JSON content-type for multipart
+				// (fetch sets correct multipart boundary)
+				if ('Content-Type' in headersObj) delete headersObj['Content-Type'];
+				if ('content-type' in headersObj) delete headersObj['content-type'];
+			} else {
+				const parsed = tryParseJson(bodyText);
+				if (!parsed.ok) {
+					setLoading(false);
+					setError('Body must be valid JSON.');
+					return;
+				}
+				body = JSON.stringify(parsed.value);
 			}
-			body = JSON.stringify(parsed.value);
 		}
 
 		const url = `${backendBase}${selected.path}`;
@@ -222,7 +384,7 @@ export default function ApiTesterClient() {
 	}
 
 	return (
-		<div className='grid gap-6 lg:grid-cols-[280px_1fr]'>
+		<div className='grid gap-6 lg:grid-cols-[280px_1fr] mt-4'>
 			{/* Sidebar */}
 			<aside className='rounded-2xl border border-gray-200 bg-white p-4 shadow-sm'>
 				<div className='flex items-center justify-between'>
@@ -337,6 +499,45 @@ export default function ApiTesterClient() {
 
 				{selected?.type === 'api' ? (
 					<>
+						{/* ✅ Multipart file uploader */}
+						{selected.bodyType === 'multipart' ? (
+							<div className='mt-5 rounded-xl border border-gray-200 bg-gray-50 p-3'>
+								<div className='text-xs font-semibold text-gray-700'>
+									File Upload
+								</div>
+								<div className='mt-1 text-[11px] text-gray-500'>
+									Field:{' '}
+									<span className='font-mono'>
+										{selected.fileField || 'image'}
+									</span>
+								</div>
+
+								<input
+									type='file'
+									accept='image/*'
+									onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+									className='mt-3 block w-full text-xs'
+								/>
+
+								<div className='mt-2 text-[11px] text-gray-600'>
+									{uploadFile ? (
+										<>
+											Selected:{' '}
+											<span className='font-mono'>{uploadFile.name}</span>
+										</>
+									) : (
+										<span className='text-gray-500'>No file selected.</span>
+									)}
+								</div>
+
+								<div className='mt-2 text-[11px] text-gray-500'>
+									Note: Don&apos;t set{' '}
+									<span className='font-mono'>Content-Type</span> manually for
+									multipart; the browser sets the boundary.
+								</div>
+							</div>
+						) : null}
+
 						<div className='mt-5 grid gap-4 lg:grid-cols-2'>
 							<div>
 								<label className='text-xs font-semibold text-gray-700'>
@@ -352,7 +553,9 @@ export default function ApiTesterClient() {
 
 							<div>
 								<label className='text-xs font-semibold text-gray-700'>
-									Body (JSON)
+									{selected.bodyType === 'multipart'
+										? 'Form Fields (JSON)'
+										: 'Body (JSON)'}
 									<span className='ml-2 text-[11px] font-normal text-gray-500'>
 										(for {selected.method})
 									</span>
