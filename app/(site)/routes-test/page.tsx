@@ -83,79 +83,6 @@ export default function ApiTesterClient() {
 				bodyType: 'json',
 				defaultBody: {},
 			},
-
-			// JSON create (your existing one)
-			// {
-			// 	id: 'products-create',
-			// 	type: 'api',
-			// 	name: 'Create Product (JSON)',
-			// 	description: 'Creates a product in the catalog (JSON version)',
-			// 	method: 'POST',
-			// 	path: '/products',
-			// 	bodyType: 'json',
-			// 	defaultBody: {
-			// 		slug: 'string',
-			// 		title: 'string',
-			// 		description: 'string',
-			// 		image_url: 'string',
-			// 		price: 0,
-			// 		discounted_price: 0,
-			// 		currency: 'usd',
-			// 		is_published: false,
-			// 		identifier: 'string',
-			// 		stock_status: 'available',
-			// 		moodle_course_id: 0,
-			// 		category_ids: [0],
-			// 	},
-			// },
-
-			// ✅ NEW: multipart create (matches your curl with -F and image upload)
-			// {
-			// 	id: 'products-create-multipart',
-			// 	type: 'api',
-			// 	name: 'Create Product (Multipart)',
-			// 	description:
-			// 		'Creates a product using multipart/form-data + image upload',
-			// 	method: 'POST',
-			// 	path: '/products',
-			// 	bodyType: 'multipart',
-			// 	fileField: 'image',
-			// 	defaultForm: {
-			// 		identifier: 'string',
-			// 		price: 'producto 3',
-			// 		discounted_price: 'string',
-			// 		slug: 'string',
-			// 		moodle_course_id: 0,
-			// 		currency: 'usd',
-			// 		category_ids: 'string',
-			// 		title: 'producto 2',
-			// 		is_published: false,
-			// 		stock_status: 'available',
-			// 		description: 'producto 2 des',
-			// 	},
-			// },
-			{
-				id: 'products-create-json-course-ids',
-				type: 'api',
-				name: 'Create Product (JSON - course_ids)',
-				description:
-					'Creates a product using JSON body with course_ids + category_ids',
-				method: 'POST',
-				path: '/products',
-				bodyType: 'json',
-				defaultBody: {
-					title: 'string',
-					description: 'string',
-					image_url: 'string',
-					price: 0,
-					discounted_price: 0,
-					currency: 'usd',
-					identifier: 'string',
-					stock_status: 'available',
-					course_ids: [0],
-					category_ids: [0],
-				},
-			},
 			{
 				id: 'products-create-multipart-course-ids',
 				type: 'api',
@@ -197,8 +124,50 @@ export default function ApiTesterClient() {
 				method: 'GET',
 				path: '/integrations/moodle/courses?page=1&page_size=50&q=&only_linked=false',
 			},
+			{
+				id: 'categories-list',
+				type: 'api',
+				name: 'List Categories',
+				description:
+					'Gets categories (optionally include product/course counts)',
+				method: 'GET',
+				path: '/categories?include_counts=false',
+			},
+			{
+				id: 'courses-list',
+				type: 'api',
+				name: 'List Courses',
+				description:
+					'Gets courses (supports include_site_course, order, limit)',
+				method: 'GET',
+				path: '/courses?include_site_course=false&order=updated_desc&limit=500',
+			},
+			{
+				id: 'products-patch-multipart-7',
+				type: 'api',
+				name: 'Update Product #7 (Multipart)',
+				description:
+					'PATCH product 7 using multipart/form-data (supports image upload)',
+				method: 'PATCH',
+				path: '/products/7',
+				bodyType: 'multipart',
+				fileField: 'image',
+				defaultForm: {
+					identifier: 'string',
+					price: 'string',
+					discounted_price: 'string',
+					currency: 'string',
+					course_ids: 'string',
+					related_product_ids: 'string',
+					category_ids: 'string',
+					title: 'string',
+					is_published: 'string',
+					stock_status: 'string',
+					description: 'string',
+				},
+			},
 		],
-		[]
+		[],
 	);
 
 	const [selectedId, setSelectedId] = useState(endpoints[0]?.id ?? '');
@@ -229,7 +198,7 @@ export default function ApiTesterClient() {
 		prettyJson({
 			accept: 'application/json',
 			'Content-Type': 'application/json',
-		})
+		}),
 	);
 
 	const [loading, setLoading] = useState(false);
@@ -260,7 +229,7 @@ export default function ApiTesterClient() {
 				setHeadersText(
 					prettyJson({
 						accept: 'application/json',
-					})
+					}),
 				);
 			} else {
 				const nextBody =
@@ -273,7 +242,7 @@ export default function ApiTesterClient() {
 					prettyJson({
 						accept: 'application/json',
 						'Content-Type': 'application/json',
-					})
+					}),
 				);
 			}
 		}
@@ -294,7 +263,7 @@ export default function ApiTesterClient() {
 		if (!headersParsed.ok || !isPlainObject(headersParsed.value)) {
 			setLoading(false);
 			setError(
-				'Headers must be a valid JSON object, e.g. { "accept": "application/json" }'
+				'Headers must be a valid JSON object, e.g. { "accept": "application/json" }',
 			);
 			return;
 		}
@@ -368,7 +337,7 @@ export default function ApiTesterClient() {
 			const parsed = tryParseJson(text);
 
 			setResponseText(
-				parsed.ok ? prettyJson(parsed.value) : String(parsed.value)
+				parsed.ok ? prettyJson(parsed.value) : String(parsed.value),
 			);
 
 			if (!res.ok) {
@@ -472,8 +441,8 @@ export default function ApiTesterClient() {
 							{selected?.type === 'api'
 								? `${selected.method} ${selected.path}`
 								: selected?.type === 'link'
-								? 'Open docs link'
-								: ''}
+									? 'Open docs link'
+									: ''}
 						</div>
 					</div>
 

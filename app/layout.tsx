@@ -1,4 +1,5 @@
 // app/layout.tsx
+import { Toaster } from 'sonner';
 import './globals.css';
 import type { Metadata } from 'next';
 
@@ -14,7 +15,10 @@ export default function RootLayout({
 }) {
 	return (
 		<html lang='en' suppressHydrationWarning>
-			<body suppressHydrationWarning>{children}</body>
+			<body suppressHydrationWarning>
+				<Toaster />
+				{children}
+			</body>
 		</html>
 	);
 }

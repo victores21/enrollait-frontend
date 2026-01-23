@@ -28,29 +28,55 @@ import {
 } from 'react-icons/fi';
 
 import { api, qs } from '@/lib/api/api';
-import NewProductModal from '@/app/components/NewProductModal';
-
-/** UI model you want */
-type ProductStatus = 'published' | 'draft' | 'archived';
-
-type Product = {
-	id: string;
-	title: string;
-	sku: string;
-	category: string;
-	price: string;
-	stock: 'available' | 'not_available';
-	status: ProductStatus;
-	updatedAt: string;
-	is_published: boolean;
+// ---------- Backend types (API response) ----------
+export type ApiCategory = {
+	id: number;
+	name: string;
+	slug: string;
 };
 
-type ProductsPagedResponse = {
-	items: any[];
+export type ApiProductItem = {
+	id: number;
+	tenant_id: number;
+	slug: string;
+	title: string;
+	description: string | null;
+	image_url: string | null;
+	price: string; // decimal string
+	discounted_price: string | null;
+	price_cents: number;
+	currency: string; // e.g. "usd"
+	is_published: boolean;
+	identifier: string | null;
+	stock_status: 'available' | 'not_available';
+	created_at: string; // "2026-01-22 04:30:03.161206+00:00"
+	categories: ApiCategory[];
+};
+
+export type ProductsPagedResponse = {
+	ok: boolean;
+	tenant_id: number;
 	page: number;
 	page_size: number;
+	total: number;
 	total_pages: number;
-	total_items?: number;
+	items: ApiProductItem[];
+};
+
+// ---------- UI types (what the table renders) ----------
+export type ProductStatus = 'published' | 'draft' | 'archived';
+
+export type Product = {
+	id: string;
+	title: string;
+	sku: string; // mapped from identifier for now
+	category: string; // mapped from categories[0]?.name or "Uncategorized"
+	price: string; // formatted string for UI (e.g. "$12.00")
+	stock: 'available' | 'not_available'; // mapped from stock_status
+	status: ProductStatus; // derived from is_published for now
+	updatedAt: string; // derived from created_at (or updated_at if you add it)
+	is_published: boolean;
+	imageUrl?: string | null; // optional: handy for later UI
 };
 
 function clsx(...parts: Array<string | false | null | undefined>) {
@@ -72,7 +98,7 @@ function Pill({
 				variant === 'slate' && 'bg-slate-100 text-slate-700',
 				variant === 'amber' && 'bg-amber-50 text-amber-700',
 				variant === 'rose' && 'bg-rose-50 text-rose-700',
-				variant === 'blue' && 'bg-blue-50 text-blue-700'
+				variant === 'blue' && 'bg-blue-50 text-blue-700',
 			)}
 		>
 			<span
@@ -82,7 +108,7 @@ function Pill({
 					variant === 'slate' && 'bg-slate-400',
 					variant === 'amber' && 'bg-amber-500',
 					variant === 'rose' && 'bg-rose-500',
-					variant === 'blue' && 'bg-blue-500'
+					variant === 'blue' && 'bg-blue-500',
 				)}
 			/>
 			{children}
@@ -149,53 +175,27 @@ function relativeTimeFromISO(iso?: string): string {
 	return `${Math.round(diff / week)}w ago`;
 }
 
-function mapApiItemToProduct(item: any): Product {
-	const title = item.title ?? item.name ?? 'Untitled';
-	const sku = item.sku ?? item.code ?? '—';
-	const is_published = item.is_published ?? item.published ?? false;
+function mapApiItemToProduct(item: ApiProductItem): Product {
+	const title = item.title ?? 'Untitled';
+	const sku = item.identifier ?? '—'; // if you want SKU to be identifier
+	const is_published = item.is_published ?? false;
 
-	const category =
-		item.category ??
-		item.category_name ??
-		(Array.isArray(item.categories) && item.categories[0]?.name) ??
-		'Uncategorized';
+	const category = item.categories?.[0]?.name
+		? item.categories[0].name
+		: 'Uncategorized';
 
-	const stock: Product['stock'] =
-		item.stock === 'available' || item.stock === 'not_available'
-			? item.stock
-			: item.stock_status === 'not_available'
-			? 'not_available'
-			: 'available';
+	const stock: Product['stock'] = item.stock_status;
 
-	let status: ProductStatus = 'draft';
-	if (
-		item.status === 'published' ||
-		item.status === 'draft' ||
-		item.status === 'archived'
-	) {
-		status = item.status;
-	} else if (typeof item.published === 'boolean') {
-		status = item.published ? 'published' : 'draft';
-	} else if (item.archived === true) {
-		status = 'archived';
-	}
-
-	const updatedRaw =
-		item.updatedAt ??
-		item.updated_at ??
-		item.modified ??
-		item.updated ??
-		item.updated_on ??
-		item.created_at;
+	const updatedRaw = item.created_at; // your endpoint provides created_at (no updated_at here)
 
 	return {
-		id: String(item.id ?? item.product_id ?? item.code ?? '—'),
+		id: String(item.id),
 		title: String(title),
 		sku: String(sku),
 		category: String(category),
-		price: formatPriceUSD(item.price ?? item.unit_price ?? item.amount),
+		price: formatPriceUSD(item.price),
 		stock,
-		status,
+		status: is_published ? 'published' : 'draft',
 		updatedAt:
 			typeof updatedRaw === 'string' ? relativeTimeFromISO(updatedRaw) : '—',
 		is_published,
@@ -208,10 +208,28 @@ function SortIcon({ dir }: { dir: false | 'asc' | 'desc' }) {
 	return <span className='h-4 w-4' />;
 }
 
+function colWidthClass(id: string) {
+	switch (id) {
+		case 'title':
+			return 'w-[40%]';
+		case 'category':
+			return 'w-[20%]';
+		case 'price':
+			return 'w-[15%]';
+		case 'statusBlock':
+			return 'w-[15%]';
+		case 'updatedAt':
+			return 'w-[10%]';
+		case 'actions':
+			return 'w-[10%]';
+		default:
+			return '';
+	}
+}
+
 export default function AdminProductsPage() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [newProductOpen, setNewProductOpen] = useState(false);
 
 	// API paging (server paging)
 	const [page, setPage] = useState(1);
@@ -234,8 +252,6 @@ export default function AdminProductsPage() {
 			setError(null);
 
 			try {
-				// matches your curl & example:
-				// /products/paged?page=1&page_size=12&published_only=true&include_categories=true
 				const res = await api<ProductsPagedResponse>(
 					`/products/paged` +
 						qs({
@@ -244,15 +260,15 @@ export default function AdminProductsPage() {
 							published_only: false,
 							include_categories: true,
 						}),
-					{ cache: 'no-store' }
+					{ cache: 'no-store' },
 				);
 
 				if (cancelled) return;
 
 				const products = (res.items ?? []).map(mapApiItemToProduct);
-				console.log('Products', products);
 				setData(products);
 				setTotalPages(res.total_pages ?? 1);
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			} catch (e: any) {
 				if (cancelled) return;
 				setError(e?.message ?? 'Failed to load products');
@@ -378,7 +394,7 @@ export default function AdminProductsPage() {
 					);
 				},
 				cell: ({ getValue }) => (
-					<div className='text-left text-xs font-bold text-slate-500'>
+					<div className='text-right text-xs font-bold text-slate-500'>
 						{String(getValue())}
 					</div>
 				),
@@ -391,14 +407,14 @@ export default function AdminProductsPage() {
 					return (
 						<div className='flex justify-end gap-2'>
 							<Link
-								href={`/admin/product/${p.id}/edit`}
-								className='inline-flex p-2 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+								href={`/admin/products/${p.id}`}
+								className='inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50'
 								aria-label='Edit'
 							>
 								<FiEdit2 />
 							</Link>
 							<button
-								className='inline-flex p-2 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+								className='inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50'
 								aria-label='More'
 							>
 								<FiMoreHorizontal />
@@ -408,7 +424,7 @@ export default function AdminProductsPage() {
 				},
 			},
 		],
-		[]
+		[],
 	);
 
 	const table = useReactTable({
@@ -421,7 +437,6 @@ export default function AdminProductsPage() {
 		onSortingChange: setSorting,
 		onGlobalFilterChange: setSearch,
 		globalFilterFn: (row, _columnId, filterValue) => {
-			// global filter across title and sku
 			const q = String(filterValue ?? '')
 				.toLowerCase()
 				.trim();
@@ -454,13 +469,8 @@ export default function AdminProductsPage() {
 				</div>
 
 				<div className='flex items-center gap-2'>
-					<button className='inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-slate-50'>
-						<FiFilter />
-						Filters
-					</button>
-
 					<Link href='/admin/products/new'>
-						<button className='inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-extrabold text-white shadow-sm hover:bg-blue-700'>
+						<button className='inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-sm hover:bg-blue-700 cursor-pointer'>
 							<FiPlus />
 							New Product
 						</button>
@@ -506,120 +516,92 @@ export default function AdminProductsPage() {
 						</div>
 					)}
 
-					{/* Desktop table */}
+					{/* Desktop table (TanStack -> real table) */}
 					{!loading && !error && (
 						<>
-							<div className='hidden overflow-hidden rounded-xl border border-slate-200 lg:block'>
-								{/* Header row */}
-								<div className='grid grid-cols-12 bg-slate-50 px-4 py-3 text-[11px] font-extrabold tracking-wider text-slate-500'>
-									<div className='col-span-4'>
-										{flexRender(
-											table.getHeaderGroups()[0].headers[0].column.columnDef
-												.header,
-											table.getHeaderGroups()[0].headers[0].getContext()
-										)}
-									</div>
+							<div className='hidden lg:block'>
+								<div className='overflow-hidden rounded-xl border border-slate-200 bg-white'>
+									<div className='overflow-x-auto'>
+										<table className='min-w-full table-fixed'>
+											<thead className='bg-slate-50'>
+												{table.getHeaderGroups().map((headerGroup) => (
+													<tr
+														key={headerGroup.id}
+														className='border-b border-slate-200'
+													>
+														{headerGroup.headers.map((header) => {
+															const id = header.column.id;
+															const isRight =
+																id === 'updatedAt' || id === 'actions';
+															return (
+																<th
+																	key={header.id}
+																	scope='col'
+																	className={clsx(
+																		'px-4 py-3 text-[11px] font-extrabold tracking-wider text-slate-500',
+																		isRight ? 'text-right' : 'text-left',
+																		colWidthClass(id),
+																	)}
+																>
+																	{header.isPlaceholder
+																		? null
+																		: flexRender(
+																				header.column.columnDef.header,
+																				header.getContext(),
+																			)}
+																</th>
+															);
+														})}
+													</tr>
+												))}
+											</thead>
 
-									<div className='col-span-2'>
-										{flexRender(
-											table.getHeaderGroups()[0].headers[1].column.columnDef
-												.header,
-											table.getHeaderGroups()[0].headers[1].getContext()
-										)}
-									</div>
-
-									<div className='col-span-2'>
-										{flexRender(
-											table.getHeaderGroups()[0].headers[2].column.columnDef
-												.header,
-											table.getHeaderGroups()[0].headers[2].getContext()
-										)}
-									</div>
-
-									<div className='col-span-2'>
-										{flexRender(
-											table.getHeaderGroups()[0].headers[3].column.columnDef
-												.header,
-											table.getHeaderGroups()[0].headers[3].getContext()
-										)}
-									</div>
-
-									<div className='col-span-1 text-right'>
-										{flexRender(
-											table.getHeaderGroups()[0].headers[4].column.columnDef
-												.header,
-											table.getHeaderGroups()[0].headers[4].getContext()
-										)}
-									</div>
-
-									<div className='col-span-1 text-right'>
-										{flexRender(
-											table.getHeaderGroups()[0].headers[5].column.columnDef
-												.header,
-											table.getHeaderGroups()[0].headers[5].getContext()
-										)}
+											<tbody className='divide-y divide-slate-200'>
+												{table.getRowModel().rows.length === 0 ? (
+													<tr>
+														<td
+															colSpan={table.getAllLeafColumns().length}
+															className='px-4 py-10'
+														>
+															<div className='text-center'>
+																<div className='text-sm font-extrabold text-slate-900'>
+																	No products found
+																</div>
+																<div className='mt-1 text-xs font-semibold text-slate-500'>
+																	Try a different search.
+																</div>
+															</div>
+														</td>
+													</tr>
+												) : (
+													table.getRowModel().rows.map((row) => (
+														<tr key={row.id} className='hover:bg-slate-50/60'>
+															{row.getVisibleCells().map((cell) => {
+																const id = cell.column.id;
+																const isRight =
+																	id === 'updatedAt' || id === 'actions';
+																return (
+																	<td
+																		key={cell.id}
+																		className={clsx(
+																			'px-4 py-4 align-middle text-sm',
+																			isRight ? 'text-right' : 'text-left',
+																		)}
+																	>
+																		{flexRender(
+																			cell.column.columnDef.cell,
+																			cell.getContext(),
+																		)}
+																	</td>
+																);
+															})}
+														</tr>
+													))
+												)}
+											</tbody>
+										</table>
 									</div>
 								</div>
-
-								{/* Body */}
-								{table.getRowModel().rows.length === 0 ? (
-									<div className='bg-white px-4 py-10 text-center'>
-										<div className='text-sm font-extrabold text-slate-900'>
-											No products found
-										</div>
-										<div className='mt-1 text-xs font-semibold text-slate-500'>
-											Try a different search.
-										</div>
-									</div>
-								) : (
-									table.getRowModel().rows.map((row, idx) => (
-										<div
-											key={row.id}
-											className={clsx(
-												'grid grid-cols-12 items-center bg-white px-4 py-4 text-sm',
-												idx !== table.getRowModel().rows.length - 1 &&
-													'border-b border-slate-200'
-											)}
-										>
-											<div className='col-span-4'>
-												{flexRender(
-													row.getVisibleCells()[0].column.columnDef.cell,
-													row.getVisibleCells()[0].getContext()
-												)}
-											</div>
-											<div className='col-span-2'>
-												{flexRender(
-													row.getVisibleCells()[1].column.columnDef.cell,
-													row.getVisibleCells()[1].getContext()
-												)}
-											</div>
-											<div className='col-span-2'>
-												{flexRender(
-													row.getVisibleCells()[2].column.columnDef.cell,
-													row.getVisibleCells()[2].getContext()
-												)}
-											</div>
-											<div className='col-span-2'>
-												{flexRender(
-													row.getVisibleCells()[3].column.columnDef.cell,
-													row.getVisibleCells()[3].getContext()
-												)}
-											</div>
-											<div className='col-span-1'>
-												{flexRender(
-													row.getVisibleCells()[4].column.columnDef.cell,
-													row.getVisibleCells()[4].getContext()
-												)}
-											</div>
-											<div className='col-span-1'>
-												{flexRender(
-													row.getVisibleCells()[5].column.columnDef.cell,
-													row.getVisibleCells()[5].getContext()
-												)}
-											</div>
-										</div>
-									))
-								)}
 							</div>
 
 							{/* Mobile cards (same data) */}
@@ -665,11 +647,10 @@ export default function AdminProductsPage() {
 												</div>
 
 												<div className='mt-3 flex flex-wrap items-center gap-2'>
-													{p.is_published && (
+													{p.is_published ? (
 														<Pill variant='green'>Published</Pill>
-													)}
-													{!p.is_published && (
-														<Pill variant='amber'>Draft</Pill>
+													) : (
+														<Pill variant='amber'>Not Published</Pill>
 													)}
 												</div>
 
@@ -684,14 +665,14 @@ export default function AdminProductsPage() {
 
 												<div className='mt-4 grid grid-cols-3 gap-2'>
 													<Link
-														href={`/admin/product/${p.id}`}
+														href={`/admin/products/${p.id}`}
 														className='inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 hover:bg-slate-50'
 													>
 														<FiEye />
 														View
 													</Link>
 													<Link
-														href={`/admin/product/${p.id}/edit`}
+														href={`/admin/products/${p.id}`}
 														className='inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 hover:bg-slate-50'
 													>
 														<FiEdit2 />
@@ -726,8 +707,8 @@ export default function AdminProductsPage() {
 										className={clsx(
 											'rounded-xl border px-4 py-2 text-sm font-extrabold shadow-sm',
 											canPrev
-												? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-												: 'cursor-not-allowed border-slate-200 bg-white text-slate-400'
+												? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer'
+												: 'cursor-not-allowed border-slate-200 bg-white text-slate-400',
 										)}
 									>
 										Previous
@@ -739,8 +720,8 @@ export default function AdminProductsPage() {
 										className={clsx(
 											'rounded-xl border px-4 py-2 text-sm font-extrabold shadow-sm',
 											canNext
-												? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-												: 'cursor-not-allowed border-slate-200 bg-white text-slate-400'
+												? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer'
+												: 'cursor-not-allowed border-slate-200 bg-white text-slate-400',
 										)}
 									>
 										Next

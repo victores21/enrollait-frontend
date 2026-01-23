@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import {
 	FiBarChart2,
 	FiBookOpen,
 	FiShoppingCart,
-	FiUsers,
 	FiSettings,
 	FiLink,
 	FiSearch,
@@ -32,32 +32,33 @@ export default function AdminLayout({
 	children: React.ReactNode;
 }) {
 	const [mobileOpen, setMobileOpen] = useState(false);
+	const pathname = usePathname();
 
 	const platformNav: NavItem[] = useMemo(
 		() => [
 			{
 				label: 'Dashboard',
 				icon: <FiBarChart2 className='h-4 w-4' />,
-				active: true,
+				active: pathname === '/admin',
 				url: '/admin',
 			},
 			{
 				label: 'Products',
 				icon: <FiBookOpen className='h-4 w-4' />,
+				active:
+					pathname === '/admin/products' ||
+					pathname.startsWith('/admin/products/'),
 				url: '/admin/products',
 			},
 			{
 				label: 'Orders',
 				icon: <FiShoppingCart className='h-4 w-4' />,
+				active:
+					pathname === '/admin/orders' || pathname.startsWith('/admin/orders/'),
 				url: '/admin/orders',
 			},
-			{
-				label: 'Students',
-				icon: <FiUsers className='h-4 w-4' />,
-				url: '/admin/students',
-			},
 		],
-		[]
+		[pathname],
 	);
 
 	const configNav: NavItem[] = useMemo(
@@ -66,11 +67,20 @@ export default function AdminLayout({
 				label: 'Integrations',
 				icon: <FiLink className='h-4 w-4' />,
 				badgeDot: true,
+				url: '/admin/integrations',
 			},
-			{ label: 'Marketing', icon: <FiSettings className='h-4 w-4' /> },
-			{ label: 'Settings', icon: <FiSettings className='h-4 w-4' /> },
+			{
+				label: 'Marketing',
+				icon: <FiSettings className='h-4 w-4' />,
+				url: '/admin/marketing',
+			},
+			{
+				label: 'Settings',
+				icon: <FiSettings className='h-4 w-4' />,
+				url: '/admin/settings',
+			},
 		],
-		[]
+		[],
 	);
 
 	return (
@@ -88,14 +98,13 @@ export default function AdminLayout({
 				className={clsx(
 					'fixed inset-y-0 left-0 z-50 w-[280px] md:w-[240px] border-r border-slate-200 bg-white',
 					'transition-transform md:translate-x-0',
-					mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+					mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
 				)}
 			>
 				<div className='flex h-full flex-col'>
 					{/* Brand */}
 					<div className='flex items-center gap-3 px-6 py-5'>
 						<div className='grid h-10 w-10 place-items-center rounded-xl bg-primary text-white shadow-sm'>
-							{/* cap icon */}
 							<svg viewBox='0 0 24 24' className='h-5 w-5' fill='none'>
 								<path
 									d='M3 8.5L12 4l9 4.5-9 4.5L3 8.5Z'
@@ -135,26 +144,27 @@ export default function AdminLayout({
 
 						<nav className='space-y-1'>
 							{platformNav.map((item) => (
-								<a
+								<Link
 									key={item.label}
-									href={item.url}
+									href={item.url ?? '#'}
+									onClick={() => setMobileOpen(false)}
 									className={clsx(
 										'flex items-center gap-3 rounded-xl px-2 py-1.5 text-sm font-semibold',
 										item.active
 											? 'bg-blue-50 text-blue-700'
-											: 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+											: 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
 									)}
 								>
 									<span
 										className={clsx(
 											'grid h-8 w-8 place-items-center rounded-lg',
-											item.active ? 'bg-white shadow-sm' : 'bg-transparent'
+											item.active ? 'bg-white shadow-sm' : 'bg-transparent',
 										)}
 									>
 										{item.icon}
 									</span>
 									<span className='flex-1'>{item.label}</span>
-								</a>
+								</Link>
 							))}
 						</nav>
 
@@ -166,7 +176,8 @@ export default function AdminLayout({
 							{configNav.map((item) => (
 								<Link
 									key={item.label}
-									href={item.url ?? ''}
+									href={item.url ?? '#'}
+									onClick={() => setMobileOpen(false)}
 									className='flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900'
 								>
 									<span className='grid h-8 w-8 place-items-center rounded-lg'>
@@ -202,7 +213,6 @@ export default function AdminLayout({
 
 			{/* Main wrapper */}
 			<div className='md:pl-[240px]'>
-				{/* Top bar */}
 				<header className='sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur'>
 					<div className='mx-auto flex h-10 max-w-[1200px] items-center gap-3 px-4 md:px-6'>
 						<button
@@ -219,29 +229,6 @@ export default function AdminLayout({
 								/>
 							</svg>
 						</button>
-
-						{/* <div className='hidden w-full max-w-[520px] items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-slate-500 shadow-sm md:flex'>
-							<FiSearch className='text-slate-400' />
-							<input
-								className='w-full bg-transparent text-sm font-medium outline-none placeholder:text-slate-400'
-								placeholder='Search orders, students, or courses...'
-							/>
-							<span className='rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500'>
-								⌘K
-							</span>
-						</div> */}
-
-						{/* <button className='ml-auto inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 md:ml-0'>
-							<FiPlus />
-							Create
-						</button> */}
-
-						{/* <button
-							className='inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50'
-							aria-label='Notifications'
-						>
-							<FiBell />
-						</button> */}
 					</div>
 
 					{/* mobile search */}
@@ -256,7 +243,6 @@ export default function AdminLayout({
 					</div>
 				</header>
 
-				{/* Route content */}
 				{children}
 			</div>
 		</div>

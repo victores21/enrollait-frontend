@@ -39,7 +39,7 @@ function Badge({
 				'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold',
 				variant === 'green' && 'bg-emerald-50 text-emerald-700',
 				variant === 'red' && 'bg-rose-50 text-rose-700',
-				variant === 'slate' && 'bg-slate-100 text-slate-700'
+				variant === 'slate' && 'bg-slate-100 text-slate-700',
 			)}
 		>
 			{children}
@@ -236,7 +236,7 @@ export default function AdminDashboardPage() {
 									key={row.id}
 									className={clsx(
 										'grid grid-cols-12 items-center bg-white px-4 py-4 text-sm',
-										idx !== arr.length - 1 && 'border-b border-slate-200'
+										idx !== arr.length - 1 && 'border-b border-slate-200',
 									)}
 								>
 									<div className='col-span-3 font-bold text-blue-600'>
@@ -292,7 +292,7 @@ export default function AdminDashboardPage() {
 										<button className='flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 hover:bg-slate-50'>
 											View Logs
 										</button>
-										<button className='flex-1 rounded-xl bg-blue-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-blue-700'>
+										<button className='flex-1 rounded-xl bg-primary px-3 py-2 text-xs font-extrabold text-white hover:bg-blue-700'>
 											Retry
 										</button>
 									</div>
@@ -317,7 +317,7 @@ export default function AdminDashboardPage() {
 										<button className='flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 hover:bg-slate-50'>
 											View Logs
 										</button>
-										<button className='flex-1 rounded-xl bg-blue-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-blue-700'>
+										<button className='flex-1 rounded-xl bg-primary px-3 py-2 text-xs font-extrabold text-white hover:bg-blue-700'>
 											Retry
 										</button>
 									</div>
@@ -373,7 +373,7 @@ export default function AdminDashboardPage() {
 											<span
 												className={clsx(
 													'h-2 w-2 rounded-full',
-													s.active ? 'bg-emerald-500' : 'bg-slate-300'
+													s.active ? 'bg-emerald-500' : 'bg-slate-300',
 												)}
 											/>
 											<div className='text-xs font-extrabold text-slate-500'>

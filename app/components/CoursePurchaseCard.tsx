@@ -151,7 +151,7 @@
 // 						onClick={() => {
 // 							console.log('Buy');
 // 						}}
-// 						className='mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 cursor-pointer'
+// 						className='mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 cursor-pointer'
 // 					>
 // 						Buy Course
 // 						<FiArrowRight className='h-4 w-4' />
@@ -292,7 +292,7 @@ export default function CoursePurchaseCard({
 								? 'Buy Course'
 								: 'Not Available'
 						}
-						className='bg-blue-600 hover:bg-blue-700'
+						className='bg-primary hover:bg-blue-700'
 					/>
 
 					{/* Optional icon on button: easiest is to add inside StripeButton, but here’s a hint text */}
