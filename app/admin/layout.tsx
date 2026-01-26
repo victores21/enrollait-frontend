@@ -68,19 +68,28 @@ export default function AdminLayout({
 				icon: <FiLink className='h-4 w-4' />,
 				badgeDot: true,
 				url: '/admin/integrations',
+				active:
+					pathname === '/admin/integrations' ||
+					pathname.startsWith('/admin/integrations/'),
 			},
 			{
 				label: 'Marketing',
 				icon: <FiSettings className='h-4 w-4' />,
 				url: '/admin/marketing',
+				active:
+					pathname === '/admin/marketing' ||
+					pathname.startsWith('/admin/marketing/'),
 			},
 			{
 				label: 'Settings',
 				icon: <FiSettings className='h-4 w-4' />,
 				url: '/admin/settings',
+				active:
+					pathname === '/admin/settings' ||
+					pathname.startsWith('/admin/settings/'),
 			},
 		],
-		[],
+		[pathname],
 	);
 
 	return (
@@ -96,9 +105,9 @@ export default function AdminLayout({
 			{/* Sidebar */}
 			<aside
 				className={clsx(
-					'fixed inset-y-0 left-0 z-50 w-[280px] md:w-[240px] border-r border-slate-200 bg-white',
-					'transition-transform md:translate-x-0',
-					mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+					'fixed inset-y-0 left-0 z-50 w-[280px] lg:w-[240px] border-r border-slate-200 bg-white',
+					'transition-transform lg:translate-x-0',
+					mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
 				)}
 			>
 				<div className='flex h-full flex-col'>
@@ -178,9 +187,19 @@ export default function AdminLayout({
 									key={item.label}
 									href={item.url ?? '#'}
 									onClick={() => setMobileOpen(false)}
-									className='flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+									className={clsx(
+										'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold',
+										item.active
+											? 'bg-blue-50 text-blue-700'
+											: 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
+									)}
 								>
-									<span className='grid h-8 w-8 place-items-center rounded-lg'>
+									<span
+										className={clsx(
+											'grid h-8 w-8 place-items-center rounded-lg',
+											item.active ? 'bg-white shadow-sm' : 'bg-transparent',
+										)}
+									>
 										{item.icon}
 									</span>
 									<span className='flex-1'>{item.label}</span>
@@ -212,7 +231,7 @@ export default function AdminLayout({
 			</aside>
 
 			{/* Main wrapper */}
-			<div className='md:pl-[240px]'>
+			<div className='lg:pl-[240px]'>
 				<header className='sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur'>
 					<div className='mx-auto flex h-10 max-w-[1200px] items-center gap-3 px-4 md:px-6'>
 						<button
