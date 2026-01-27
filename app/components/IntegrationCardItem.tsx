@@ -77,14 +77,6 @@ export function IntegrationCard({
 						{it.secondaryCta.label}
 					</Link>
 				) : null}
-
-				<div className='sm:ml-auto text-xs font-bold text-slate-500'>
-					{it.status === 'connected'
-						? 'This integration is active.'
-						: it.status === 'pending'
-							? 'Finish setup to activate.'
-							: 'Not configured yet.'}
-				</div>
 			</div>
 		</div>
 	);

@@ -72,22 +72,6 @@ export default function AdminLayout({
 					pathname === '/admin/integrations' ||
 					pathname.startsWith('/admin/integrations/'),
 			},
-			{
-				label: 'Marketing',
-				icon: <FiSettings className='h-4 w-4' />,
-				url: '/admin/marketing',
-				active:
-					pathname === '/admin/marketing' ||
-					pathname.startsWith('/admin/marketing/'),
-			},
-			{
-				label: 'Settings',
-				icon: <FiSettings className='h-4 w-4' />,
-				url: '/admin/settings',
-				active:
-					pathname === '/admin/settings' ||
-					pathname.startsWith('/admin/settings/'),
-			},
 		],
 		[pathname],
 	);
@@ -132,9 +116,7 @@ export default function AdminLayout({
 
 						<div className='leading-tight'>
 							<div className='text-sm font-extrabold'>Enrollait</div>
-							<div className='text-xs font-medium text-slate-500'>
-								Tenant Admin
-							</div>
+							<div className='text-xs font-medium text-slate-500'>Admin</div>
 						</div>
 
 						<button
@@ -211,7 +193,7 @@ export default function AdminLayout({
 						</nav>
 					</div>
 
-					<div className='mt-auto border-t border-slate-200 px-6 py-4'>
+					{/* <div className='mt-auto border-t border-slate-200 px-6 py-4'>
 						<div className='flex items-center gap-3'>
 							<div className='h-9 w-9 overflow-hidden rounded-full bg-slate-200'>
 								<div className='grid h-full w-full place-items-center text-xs font-black text-slate-600'>
@@ -226,7 +208,7 @@ export default function AdminLayout({
 							</div>
 							<FiChevronDown className='ml-auto text-slate-400' />
 						</div>
-					</div>
+					</div> */}
 				</div>
 			</aside>
 

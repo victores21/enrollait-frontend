@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import CardShell from '@/app/components/CardShell';
 import { Pill } from '@/app/components/Pill';
+import LoadingOverlay from '@/app/components/LoadingOverlay';
 import {
 	FiCheckCircle,
 	FiClock,
@@ -22,6 +23,7 @@ import clsx from '@/lib/clsx';
 
 type ConnState = 'idle' | 'testing' | 'ok' | 'error';
 type SyncState = 'idle' | 'syncing';
+type SaveState = 'idle' | 'saving';
 
 type MoodleTestResponse = {
 	connected: boolean;
@@ -176,6 +178,7 @@ export default function AdminMoodleIntegrationPage() {
 	const [hasTestedOk, setHasTestedOk] = useState(false);
 
 	const [syncState, setSyncState] = useState<SyncState>('idle');
+	const [saveState, setSaveState] = useState<SaveState>('idle');
 
 	// --- domain + name
 	useEffect(() => {
@@ -217,7 +220,7 @@ export default function AdminMoodleIntegrationPage() {
 			const urlFromDb = (snap?.tenant?.moodle_url || '').toString();
 			if (urlFromDb && !moodleUrl.trim()) setMoodleUrl(urlFromDb);
 
-			// If already configured, we skip "must test first" (user can still test)
+			// If already configured, allow save-less flow (user can still test)
 			if (configured) setHasTestedOk(true);
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		} catch (e: any) {
@@ -256,7 +259,7 @@ export default function AdminMoodleIntegrationPage() {
 	// 3) If configured -> Sync
 	const canTest = moodleUrl.trim() && token.trim() && connState !== 'testing';
 	const canSave =
-		!configured && // your /connect creates tenant; don't show Save when already configured
+		!configured &&
 		hasTestedOk &&
 		moodleUrl.trim() &&
 		token.trim() &&
@@ -267,7 +270,7 @@ export default function AdminMoodleIntegrationPage() {
 
 	const step = useMemo(() => {
 		if (!configured) return 1;
-		return 2; // once configured, show sync step
+		return 2;
 	}, [configured]);
 
 	async function testConnection() {
@@ -313,6 +316,7 @@ export default function AdminMoodleIntegrationPage() {
 
 	async function saveConnection() {
 		setBanner(null);
+		setSaveState('saving');
 
 		try {
 			const res = await api<MoodleConnectResponse>(
@@ -351,6 +355,8 @@ export default function AdminMoodleIntegrationPage() {
 				title: 'Save failed',
 				body: e?.message ?? 'Failed to save connection.',
 			});
+		} finally {
+			setSaveState('idle');
 		}
 	}
 
@@ -429,304 +435,350 @@ export default function AdminMoodleIntegrationPage() {
 	}
 
 	return (
-		<main className='mx-auto max-w-[1200px] px-4 py-6 md:px-6 md:py-8'>
-			<div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
-				<div>
-					<h1 className='text-2xl font-extrabold tracking-tight'>
-						Moodle Integration
-					</h1>
-					<p className='mt-1 text-sm font-medium text-slate-500'>
-						1) Test connection → 2) Save → 3) Sync courses & categories
-					</p>
+		<>
+			<LoadingOverlay
+				show={
+					snapshotLoading ||
+					connState === 'testing' ||
+					saveState === 'saving' ||
+					syncState === 'syncing'
+				}
+				title={
+					connState === 'testing'
+						? 'Testing Moodle connection…'
+						: saveState === 'saving'
+							? 'Saving Moodle connection…'
+							: syncState === 'syncing'
+								? 'Syncing from Moodle…'
+								: 'Loading…'
+				}
+				message={
+					connState === 'testing'
+						? 'Validating your Moodle URL and token.'
+						: saveState === 'saving'
+							? 'Persisting Moodle URL/token for this tenant.'
+							: syncState === 'syncing'
+								? 'Fetching courses/categories and updating your database.'
+								: 'Fetching current Moodle configuration.'
+				}
+			/>
+
+			<main className='mx-auto max-w-[1200px] px-4 py-6 md:px-6 md:py-8'>
+				<div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
+					<div>
+						<h1 className='text-2xl font-extrabold tracking-tight'>
+							Moodle Integration
+						</h1>
+						<p className='mt-1 text-sm font-medium text-slate-500'>
+							1) Test connection → 2) Save → 3) Sync courses & categories
+						</p>
+					</div>
+
+					<Link
+						href='/admin/integrations'
+						className='inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-slate-50'
+					>
+						Back to integrations
+					</Link>
 				</div>
 
-				<Link
-					href='/admin/integrations'
-					className='inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-slate-50'
-				>
-					Back to integrations
-				</Link>
-			</div>
-
-			<div className='mt-6 flex flex-wrap gap-6'>
-				{/* LEFT */}
-				<div className='space-y-6 flex-1'>
-					<CardShell title='Setup' subtitle='Connect Moodle and sync data.'>
-						{/* top status */}
-						<div className='flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3'>
-							<div className='min-w-0'>
-								<div className='text-[11px] font-extrabold tracking-wider text-slate-500'>
-									STATUS
+				<div className='mt-6 flex flex-wrap gap-6'>
+					{/* LEFT */}
+					<div className='space-y-6 flex-1'>
+						<CardShell title='Setup' subtitle='Connect Moodle and sync data.'>
+							{/* top status */}
+							<div className='flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3'>
+								<div className='min-w-0'>
+									<div className='text-[11px] font-extrabold tracking-wider text-slate-500'>
+										STATUS
+									</div>
+									<div className='mt-1 text-sm font-extrabold text-slate-900'>
+										{configured ? 'Configured' : 'Not configured'}
+									</div>
 								</div>
-								<div className='mt-1 text-sm font-extrabold text-slate-900'>
-									{snapshotLoading ? (
-										'Loading...'
-									) : configured ? (
-										<div className='flex items-center gap-2 bg-emerald-50 text-emerald-700'>
-											<Pill variant='green'>Configured</Pill>
-										</div>
+
+								<div className='flex items-center gap-2'>
+									{configured ? (
+										<Pill variant='green'>
+											<FiCheckCircle className='h-3.5 w-3.5' />
+											Saved
+										</Pill>
 									) : (
-										<div className='flex items-center gap-2 bg-red-50 text-red-700'>
-											<Pill variant='slate'>Not configured</Pill>
-										</div>
+										<Pill variant='slate'>
+											<FiClock className='h-3.5 w-3.5' />
+											Setup
+										</Pill>
 									)}
+
+									<button
+										onClick={refreshSnapshot}
+										className='inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 shadow-sm hover:bg-slate-50'
+										type='button'
+									>
+										<FiRefreshCw
+											className={clsx(snapshotLoading && 'animate-spin')}
+										/>
+										Refresh
+									</button>
 								</div>
 							</div>
 
-							<div className='flex items-center gap-2'>
-								{configured ? (
-									<Pill variant='green'>
-										<FiCheckCircle className='h-3.5 w-3.5' />
-										Saved
-									</Pill>
-								) : (
-									<Pill variant='slate'>
-										<FiClock className='h-3.5 w-3.5' />
-										Setup
-									</Pill>
-								)}
-
-								<button
-									onClick={refreshSnapshot}
-									className='inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 shadow-sm hover:bg-slate-50'
-									type='button'
-								>
-									<FiRefreshCw
-										className={clsx(snapshotLoading && 'animate-spin')}
+							{/* banner */}
+							<div className='mt-4 space-y-3'>
+								{banner ? (
+									<Banner
+										variant={banner.variant}
+										title={banner.title}
+										body={banner.body}
+										onClose={() => setBanner(null)}
 									/>
-									Refresh
-								</button>
-							</div>
-						</div>
+								) : null}
 
-						{/* banner */}
-						<div className='mt-4 space-y-3'>
-							{banner ? (
-								<Banner
-									variant={banner.variant}
-									title={banner.title}
-									body={banner.body}
-									onClose={() => setBanner(null)}
-								/>
-							) : null}
-
-							{domainWarning ? (
-								<Banner
-									variant='info'
-									title='Domain not detected'
-									body={domainWarning}
-								/>
-							) : null}
-						</div>
-
-						{/* Step 1: Credentials */}
-						<div className='mt-6'>
-							<div className='flex items-center gap-2'>
-								<span
-									className={clsx(
-										'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold',
-										step === 1
-											? 'border-blue-200 bg-blue-50 text-blue-700'
-											: 'border-slate-200 bg-slate-50 text-slate-600',
-									)}
-								>
-									1. Credentials
-								</span>
-
-								{connState === 'ok' ? (
-									<Pill variant='green'>
-										<FiCheckCircle className='h-3.5 w-3.5' />
-										Test OK
-									</Pill>
-								) : connState === 'error' ? (
-									<Pill variant='rose'>
-										<FiXCircle className='h-3.5 w-3.5' />
-										Test failed
-									</Pill>
+								{domainWarning ? (
+									<Banner
+										variant='info'
+										title='Domain not detected'
+										body={domainWarning}
+									/>
 								) : null}
 							</div>
 
-							<div className='mt-4'>
-								<div className='text-[11px] font-extrabold tracking-wider text-slate-500'>
-									MOODLE URL
-								</div>
-								<div className='mt-2 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm'>
-									<input
-										value={moodleUrl}
-										onChange={(e) => setMoodleUrl(e.target.value)}
-										className='w-full bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400'
-										placeholder='https://your-moodle-site.com'
-									/>
-								</div>
-
-								<div className='mt-6 flex items-center justify-between'>
-									<div className='text-[11px] font-extrabold tracking-wider text-slate-500'>
-										ACCESS TOKEN
+							{/* Snapshot summary */}
+							{configured ? (
+								<div className='mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2'>
+									<div className='rounded-2xl border border-slate-200 bg-white px-4 py-3'>
+										<div className='text-[11px] font-extrabold tracking-wider text-slate-500'>
+											COURSES
+										</div>
+										<div className='mt-1 text-lg font-extrabold text-slate-900'>
+											{snapshot?.summary?.courses_total ?? 0}
+										</div>
 									</div>
-									<Link
-										href='/admin/integrations/moodle/docs'
-										className='inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700'
-									>
-										How to generate?
-										<FiExternalLink className='h-3.5 w-3.5' />
-									</Link>
+									<div className='rounded-2xl border border-slate-200 bg-white px-4 py-3'>
+										<div className='text-[11px] font-extrabold tracking-wider text-slate-500'>
+											CATEGORIES
+										</div>
+										<div className='mt-1 text-lg font-extrabold text-slate-900'>
+											{snapshot?.summary?.categories_total ?? 0}
+										</div>
+									</div>
 								</div>
+							) : null}
 
-								<div className='mt-2 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm'>
-									<input
-										type={showToken ? 'text' : 'password'}
-										value={token}
-										onChange={(e) => setToken(e.target.value)}
-										className='w-full bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400'
-										placeholder='••••••••••••••••'
-									/>
-									<button
-										onClick={() => setShowToken((p) => !p)}
-										className='rounded-xl p-2 text-slate-500 hover:bg-slate-50'
-										aria-label={showToken ? 'Hide token' : 'Show token'}
-										type='button'
-									>
-										{showToken ? <FiEyeOff /> : <FiEye />}
-									</button>
-								</div>
-
-								<div className='mt-6 flex flex-col gap-3 sm:flex-row sm:items-center'>
-									<button
-										onClick={testConnection}
-										disabled={!canTest}
+							{/* Step 1: Credentials */}
+							<div className='mt-6'>
+								<div className='flex items-center gap-2'>
+									<span
 										className={clsx(
-											'inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-extrabold shadow-sm sm:w-auto',
-											canTest
+											'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold',
+											step === 1
+												? 'border-blue-200 bg-blue-50 text-blue-700'
+												: 'border-slate-200 bg-slate-50 text-slate-600',
+										)}
+									>
+										1. Credentials
+									</span>
+
+									{connState === 'ok' ? (
+										<Pill variant='green'>
+											<FiCheckCircle className='h-3.5 w-3.5' />
+											Test OK
+										</Pill>
+									) : connState === 'error' ? (
+										<Pill variant='rose'>
+											<FiXCircle className='h-3.5 w-3.5' />
+											Test failed
+										</Pill>
+									) : null}
+								</div>
+
+								<div className='mt-4'>
+									<div className='text-[11px] font-extrabold tracking-wider text-slate-500'>
+										MOODLE URL
+									</div>
+									<div className='mt-2 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm'>
+										<input
+											value={moodleUrl}
+											onChange={(e) => setMoodleUrl(e.target.value)}
+											className='w-full bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400'
+											placeholder='https://your-moodle-site.com'
+										/>
+									</div>
+
+									<div className='mt-6 flex items-center justify-between'>
+										<div className='text-[11px] font-extrabold tracking-wider text-slate-500'>
+											ACCESS TOKEN
+										</div>
+										<Link
+											href='/admin/integrations/moodle/docs'
+											className='inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700'
+										>
+											How to generate?
+											<FiExternalLink className='h-3.5 w-3.5' />
+										</Link>
+									</div>
+
+									<div className='mt-2 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm'>
+										<input
+											type={showToken ? 'text' : 'password'}
+											value={token}
+											onChange={(e) => setToken(e.target.value)}
+											className='w-full bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400'
+											placeholder='••••••••••••••••'
+										/>
+										<button
+											onClick={() => setShowToken((p) => !p)}
+											className='rounded-xl p-2 text-slate-500 hover:bg-slate-50'
+											aria-label={showToken ? 'Hide token' : 'Show token'}
+											type='button'
+										>
+											{showToken ? <FiEyeOff /> : <FiEye />}
+										</button>
+									</div>
+
+									<div className='mt-6 flex flex-col gap-3 sm:flex-row sm:items-center'>
+										<button
+											onClick={testConnection}
+											disabled={!canTest}
+											className={clsx(
+												'inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-extrabold shadow-sm sm:w-auto',
+												canTest
+													? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+													: 'cursor-not-allowed border-slate-200 bg-white text-slate-400',
+											)}
+											type='button'
+										>
+											<FiRefreshCw
+												className={clsx(
+													connState === 'testing' && 'animate-spin',
+												)}
+											/>
+											{connState === 'testing'
+												? 'Testing...'
+												: 'Test connection'}
+										</button>
+
+										{configured ? (
+											<Pill variant='green'>
+												<FiCheckCircle className='h-3.5 w-3.5' />
+												Already saved
+											</Pill>
+										) : (
+											<button
+												onClick={saveConnection}
+												disabled={!canSave}
+												className={clsx(
+													'inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-extrabold text-white shadow-sm sm:ml-auto sm:w-auto',
+													canSave
+														? 'bg-primary hover:bg-blue-700'
+														: 'cursor-not-allowed bg-slate-300',
+												)}
+												type='button'
+											>
+												Save connection
+												<FiArrowRight />
+											</button>
+										)}
+									</div>
+								</div>
+							</div>
+
+							{/* Step 2: Sync */}
+							<div className='mt-10 border-t border-slate-200 pt-6'>
+								<div className='flex items-center justify-between gap-3'>
+									<span
+										className={clsx(
+											'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold',
+											configured
+												? 'border-blue-200 bg-blue-50 text-blue-700'
+												: 'border-slate-200 bg-slate-50 text-slate-600',
+										)}
+									>
+										2. Sync
+									</span>
+
+									{configured ? (
+										<Pill variant='green'>
+											<FiCheckCircle className='h-3.5 w-3.5' />
+											Ready to sync
+										</Pill>
+									) : (
+										<Pill variant='slate'>
+											<FiClock className='h-3.5 w-3.5' />
+											Save connection first
+										</Pill>
+									)}
+								</div>
+
+								<div className='mt-4 mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2'>
+									<button
+										onClick={syncCourses}
+										disabled={!canSync}
+										className={clsx(
+											'inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-extrabold shadow-sm',
+											canSync
 												? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
 												: 'cursor-not-allowed border-slate-200 bg-white text-slate-400',
 										)}
 										type='button'
 									>
-										<FiRefreshCw
+										<FiDownloadCloud
 											className={clsx(
-												connState === 'testing' && 'animate-spin',
+												syncState === 'syncing' && 'animate-pulse',
 											)}
 										/>
-										{connState === 'testing' ? 'Testing...' : 'Test connection'}
+										Sync courses
 									</button>
 
-									{/* Only show Save when not configured (because your backend creates tenant and 409 if it already exists) */}
-									{configured ? (
-										<Pill variant='green'>
-											<FiCheckCircle className='h-3.5 w-3.5' />
-											Already saved
-										</Pill>
-									) : (
-										<button
-											onClick={saveConnection}
-											disabled={!canSave}
+									<button
+										onClick={syncCategories}
+										disabled={!canSync}
+										className={clsx(
+											'inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-extrabold shadow-sm',
+											canSync
+												? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+												: 'cursor-not-allowed border-slate-200 bg-white text-slate-400',
+										)}
+										type='button'
+									>
+										<FiDownloadCloud
 											className={clsx(
-												'inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-extrabold text-white shadow-sm sm:ml-auto sm:w-auto',
-												canSave
-													? 'bg-primary hover:bg-blue-700'
-													: 'cursor-not-allowed bg-slate-300',
+												syncState === 'syncing' && 'animate-pulse',
 											)}
-											type='button'
-										>
-											Save connection
-											<FiArrowRight />
-										</button>
-									)}
+										/>
+										Sync categories
+									</button>
 								</div>
 							</div>
-						</div>
+						</CardShell>
+					</div>
 
-						{/* Step 2: Sync */}
-						<div className='mt-10 border-t border-slate-200 pt-6'>
-							<div className='flex items-center justify-between gap-3'>
-								<span
-									className={clsx(
-										'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold',
-										configured
-											? 'border-blue-200 bg-blue-50 text-blue-700'
-											: 'border-slate-200 bg-slate-50 text-slate-600',
-									)}
-								>
-									2. Sync
-								</span>
-
-								{configured ? (
-									<Pill variant='green'>
-										<FiCheckCircle className='h-3.5 w-3.5' />
-										Ready to sync
-									</Pill>
-								) : (
-									<Pill variant='slate'>
-										<FiClock className='h-3.5 w-3.5' />
-										Save connection first
-									</Pill>
-								)}
+					{/* RIGHT */}
+					<div className='space-y-6 w-full lg:w-[360px]'>
+						<div className='rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 p-5 text-white shadow-sm'>
+							<div className='flex items-center gap-2 text-white/90'>
+								<FiLink />
+								<div className='text-sm font-extrabold'>
+									Need help connecting?
+								</div>
 							</div>
 
-							<div className='mt-4 mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2'>
-								<button
-									onClick={syncCourses}
-									disabled={!canSync}
-									className={clsx(
-										'inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-extrabold shadow-sm cursor-pointer',
-										canSync
-											? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-											: 'cursor-not-allowed border-slate-200 bg-white text-slate-400',
-									)}
-									type='button'
-								>
-									<FiDownloadCloud
-										className={clsx(syncState === 'syncing' && 'animate-pulse')}
-									/>
-									Sync courses
-								</button>
+							<p className='mt-2 text-sm font-medium text-white/90'>
+								Enable Moodle web services and generate a token. Then test and
+								save the connection.
+							</p>
 
-								<button
-									onClick={syncCategories}
-									disabled={!canSync}
-									className={clsx(
-										'inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-extrabold shadow-sm cursor-pointer',
-										canSync
-											? 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-											: 'cursor-not-allowed border-slate-200 bg-white text-slate-400',
-									)}
-									type='button'
-								>
-									<FiDownloadCloud
-										className={clsx(syncState === 'syncing' && 'animate-pulse')}
-									/>
-									Sync categories
-								</button>
-							</div>
+							<Link
+								href='/admin/integrations/moodle/docs'
+								className='mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white/15 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm hover:bg-white/20'
+							>
+								Read integration guide
+								<FiExternalLink />
+							</Link>
 						</div>
-					</CardShell>
-				</div>
-
-				{/* RIGHT */}
-				<div className='space-y-6 w-full lg:w-[360px]'>
-					<div className='rounded-2xl bg-gradient-to-br from-blue-600 to-blue-700 p-5 text-white shadow-sm'>
-						<div className='flex items-center gap-2 text-white/90'>
-							<FiLink />
-							<div className='text-sm font-extrabold'>
-								Need help connecting?
-							</div>
-						</div>
-
-						<p className='mt-2 text-sm font-medium text-white/90'>
-							Enable Moodle web services and generate a token. Then test and
-							save the connection.
-						</p>
-
-						<Link
-							href='/admin/integrations/moodle/docs'
-							className='mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white/15 px-4 py-2.5 text-sm font-extrabold text-white shadow-sm hover:bg-white/20'
-						>
-							Read integration guide
-							<FiExternalLink />
-						</Link>
 					</div>
 				</div>
-			</div>
-		</main>
+			</main>
+		</>
 	);
 }
