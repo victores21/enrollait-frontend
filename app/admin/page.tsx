@@ -1,6 +1,9 @@
 'use client';
 
 import { FiAlertTriangle, FiCheckCircle, FiCircle } from 'react-icons/fi';
+import { MeResponse } from '../types';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api/api';
 
 function clsx(...parts: Array<string | false | null | undefined>) {
 	return parts.filter(Boolean).join(' ');
@@ -116,6 +119,18 @@ function CardShell({
 }
 
 export default function AdminDashboardPage() {
+	const [me, setMe] = useState<MeResponse | null>(null);
+
+	useEffect(() => {
+		(async () => {
+			try {
+				const r = await api<MeResponse>('/admin/auth/me', { method: 'GET' });
+				setMe(r);
+			} catch {
+				setMe(null);
+			}
+		})();
+	}, []);
 	return (
 		<main className='mx-auto max-w-[1200px] px-4 py-6 md:px-6 md:py-8'>
 			<div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
@@ -387,6 +402,17 @@ export default function AdminDashboardPage() {
 					</div>
 				</div>
 			</div>
+
+			<CardShell title='Your session'>
+				<div className='mt-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm'>
+					<div className='font-extrabold text-slate-900'>
+						{me?.email ?? '-'}
+					</div>
+					<div className='mt-1 text-xs font-semibold text-slate-500'>
+						role: {me?.role ?? '-'} • tenant_id: {me?.tenant_id ?? '-'}
+					</div>
+				</div>
+			</CardShell>
 		</main>
 	);
 }

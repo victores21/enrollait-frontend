@@ -61,3 +61,11 @@ export type ProductForStripeCheckout = {
 	created_at: string;
 	categories?: { id: number; name: string; slug: string }[];
 };
+
+export type MeResponse = {
+	ok: boolean;
+	tenant_id: number;
+	admin_user_id: number;
+	email: string;
+	role: string;
+};
