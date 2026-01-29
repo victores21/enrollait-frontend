@@ -1,13 +1,156 @@
 'use client';
 
-import { FiAlertTriangle, FiCheckCircle, FiCircle } from 'react-icons/fi';
+import Link from 'next/link';
+import {
+	FiAlertTriangle,
+	FiCheckCircle,
+	FiCircle,
+	FiLoader,
+} from 'react-icons/fi';
 import { MeResponse } from '../types';
-import { useEffect, useState } from 'react';
-import { api } from '@/lib/api/api';
+import { useEffect, useMemo, useState } from 'react';
+import { api, qs } from '@/lib/api/api';
+import Image from 'next/image';
 
 function clsx(...parts: Array<string | false | null | undefined>) {
 	return parts.filter(Boolean).join(' ');
 }
+
+/* ----------------------------- Orders types/helpers ----------------------------- */
+
+export type ApiOrderItem = {
+	id: number;
+	tenant_id: number;
+	product_id: number | null;
+	buyer_email: string | null;
+	stripe_session_id: string | null;
+	status: 'pending' | 'paid' | 'fulfilled' | 'expired' | string;
+	created_at: string;
+	total_cents: number | null;
+	product?: {
+		slug: string | null;
+		title: string | null;
+		image_url: string | null;
+		price: string | null;
+		discounted_price: string | null;
+		currency: string | null;
+	};
+};
+
+export type OrdersPagedResponse = {
+	ok: boolean;
+	tenant_id: number;
+	page: number;
+	page_size: number;
+	total: number;
+	total_pages: number;
+	items: ApiOrderItem[];
+};
+
+function formatMoneyFromCents(
+	cents: number | null | undefined,
+	currency: string | null | undefined,
+) {
+	const cur = (currency || 'usd').toUpperCase();
+	const n = Number(cents ?? 0);
+	const amount = Number.isFinite(n) ? n / 100 : 0;
+
+	try {
+		return new Intl.NumberFormat('en-US', {
+			style: 'currency',
+			currency: cur,
+			minimumFractionDigits: 2,
+		}).format(amount);
+	} catch {
+		return `$${amount.toFixed(2)}`;
+	}
+}
+
+function relativeTimeFromISO(iso?: string): string {
+	if (!iso) return '—';
+	const d = new Date(iso);
+	const now = Date.now();
+	const diff = Math.max(0, now - d.getTime());
+
+	const minute = 60_000;
+	const hour = 60 * minute;
+	const day = 24 * hour;
+	const week = 7 * day;
+
+	if (diff < hour) return `${Math.max(1, Math.round(diff / minute))}m ago`;
+	if (diff < day) return `${Math.round(diff / hour)}h ago`;
+	if (diff < week) return `${Math.round(diff / day)}d ago`;
+	return `${Math.round(diff / week)}w ago`;
+}
+
+/* -------------------------- Integrations status types -------------------------- */
+
+type IntegrationsStatusResponse = {
+	ok: boolean;
+	tenant_id: number;
+	all_configured: boolean;
+	moodle: {
+		configured: boolean;
+		missing: string[];
+		moodle_url?: string | null;
+	};
+	stripe: {
+		configured: boolean;
+		missing: string[];
+		stripe_publishable_key?: string | null;
+	};
+};
+
+type IntegrationStatus = 'connected' | 'pending' | 'disconnected';
+
+/**
+ * Mapping:
+ * - configured => connected
+ * - some fields set but not all required => pending
+ * - none set => disconnected
+ */
+function statusFromConfig(
+	configured: boolean,
+	missing: string[],
+	requiredCount: number,
+): IntegrationStatus {
+	if (configured) return 'connected';
+	if (missing.length > 0 && missing.length < requiredCount) return 'pending';
+	return 'disconnected';
+}
+
+function StatusDot({ status }: { status: IntegrationStatus }) {
+	if (status === 'connected')
+		return <span className='h-2 w-2 rounded-full bg-emerald-500' />;
+	if (status === 'pending')
+		return <span className='h-2 w-2 rounded-full bg-amber-500' />;
+	return <span className='h-2 w-2 rounded-full bg-slate-300' />;
+}
+
+function StatusLabel({ status }: { status: IntegrationStatus }) {
+	if (status === 'connected')
+		return (
+			<span className='inline-flex items-center gap-2 text-xs font-extrabold text-emerald-700'>
+				<FiCheckCircle className='h-4 w-4' />
+				Connected
+			</span>
+		);
+	if (status === 'pending')
+		return (
+			<span className='inline-flex items-center gap-2 text-xs font-extrabold text-amber-700'>
+				<FiCircle className='h-4 w-4' />
+				Pending
+			</span>
+		);
+	return (
+		<span className='inline-flex items-center gap-2 text-xs font-extrabold text-slate-600'>
+			<FiCircle className='h-4 w-4 text-slate-300' />
+			Not connected
+		</span>
+	);
+}
+
+/* -------------------------------- UI components -------------------------------- */
 
 function Sparkline({
 	path,
@@ -118,8 +261,22 @@ function CardShell({
 	);
 }
 
+/* ---------------------------------- Page ---------------------------------- */
+
 export default function AdminDashboardPage() {
 	const [me, setMe] = useState<MeResponse | null>(null);
+
+	// Recent orders state
+	const [ordersLoading, setOrdersLoading] = useState(true);
+	const [ordersError, setOrdersError] = useState<string | null>(null);
+	const [recentOrders, setRecentOrders] = useState<ApiOrderItem[]>([]);
+
+	// Integrations status state (NEW)
+	const [intLoading, setIntLoading] = useState(true);
+	const [intError, setIntError] = useState<string | null>(null);
+	const [intStatus, setIntStatus] = useState<IntegrationsStatusResponse | null>(
+		null,
+	);
 
 	useEffect(() => {
 		(async () => {
@@ -131,6 +288,101 @@ export default function AdminDashboardPage() {
 			}
 		})();
 	}, []);
+
+	// Fetch last 10 orders
+	useEffect(() => {
+		let cancelled = false;
+
+		(async () => {
+			setOrdersLoading(true);
+			setOrdersError(null);
+
+			try {
+				const res = await api<OrdersPagedResponse>(
+					`/orders/paged` +
+						qs({
+							page: 1,
+							page_size: 10,
+							include_product: true,
+						}),
+					{ cache: 'no-store' },
+				);
+
+				if (cancelled) return;
+
+				const sorted = [...(res.items ?? [])].sort((a, b) => {
+					const ta = new Date(a.created_at).getTime();
+					const tb = new Date(b.created_at).getTime();
+					return tb - ta;
+				});
+
+				setRecentOrders(sorted.slice(0, 10));
+			} catch (e: any) {
+				if (cancelled) return;
+				setOrdersError(e?.message ?? 'Failed to load recent orders');
+			} finally {
+				if (!cancelled) setOrdersLoading(false);
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	// Fetch integrations status (NEW)
+	useEffect(() => {
+		let cancelled = false;
+
+		(async () => {
+			setIntLoading(true);
+			setIntError(null);
+
+			try {
+				const res = await api<IntegrationsStatusResponse>(
+					'/integrations/status',
+					{ method: 'GET', cache: 'no-store' },
+				);
+				if (cancelled) return;
+				setIntStatus(res);
+			} catch (e: any) {
+				if (cancelled) return;
+				setIntStatus(null);
+				setIntError(e?.message ?? 'Failed to load integrations status');
+			} finally {
+				if (!cancelled) setIntLoading(false);
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const recentOrderRows = useMemo(() => {
+		return recentOrders.map((o) => {
+			const email = (o.buyer_email || '').trim().toLowerCase() || '—';
+			const course = o.product?.title?.trim() || '—';
+			const amount = formatMoneyFromCents(o.total_cents, o.product?.currency);
+			return {
+				id: `#ORD-${o.id}`,
+				email,
+				course,
+				amount,
+				createdLabel: relativeTimeFromISO(o.created_at),
+				rawId: o.id,
+			};
+		});
+	}, [recentOrders]);
+
+	const moodleStatus: IntegrationStatus = intStatus
+		? statusFromConfig(intStatus.moodle.configured, intStatus.moodle.missing, 2)
+		: 'disconnected';
+
+	const stripeStatus: IntegrationStatus = intStatus
+		? statusFromConfig(intStatus.stripe.configured, intStatus.stripe.missing, 2)
+		: 'disconnected';
+
 	return (
 		<main className='mx-auto max-w-[1200px] px-4 py-6 md:px-6 md:py-8'>
 			<div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
@@ -141,23 +393,10 @@ export default function AdminDashboardPage() {
 						marketplace today.
 					</p>
 				</div>
-
-				{/* <div className='flex items-center gap-3'>
-					<Badge variant='green'>
-						<span className='inline-block h-2 w-2 rounded-full bg-emerald-500' />
-						Live Data
-					</Badge>
-					<a
-						href='#'
-						className='text-sm font-bold text-blue-600 hover:text-blue-700'
-					>
-						Customize Layout
-					</a>
-				</div> */}
 			</div>
 
 			{/* KPI cards */}
-			<div className='mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+			{/* <div className='mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
 				<KpiCard
 					label='Total Revenue'
 					value='$12,450'
@@ -190,7 +429,7 @@ export default function AdminDashboardPage() {
 					sparkPath='M2 22 C 30 22, 46 22, 60 22 S 92 22, 118 22'
 					sparkStroke='stroke-emerald-500'
 				/>
-			</div>
+			</div> */}
 
 			{/* Two-column lower layout */}
 			<div className='mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12'>
@@ -199,75 +438,77 @@ export default function AdminDashboardPage() {
 					<CardShell
 						title='Recent Orders'
 						right={
-							<a
-								href='#'
+							<Link
+								href='/admin/orders'
 								className='text-sm font-bold text-blue-600 hover:text-blue-700'
 							>
 								View All
-							</a>
+							</Link>
 						}
 					>
 						<div className='overflow-hidden rounded-xl border border-slate-200'>
 							<div className='grid grid-cols-12 bg-slate-50 px-4 py-3 text-[11px] font-extrabold tracking-wider text-slate-500'>
 								<div className='col-span-3'>ORDER ID</div>
-								<div className='col-span-3'>STUDENT</div>
-								<div className='col-span-4'>COURSE</div>
+								<div className='col-span-3'>EMAIL</div>
+								<div className='col-span-4'>PRODUCT</div>
 								<div className='col-span-2 text-right'>AMOUNT</div>
 							</div>
 
-							{[
-								{
-									id: '#ORD-7721',
-									student: 'Jane Doe',
-									course: 'Advanced Python Mastery',
-									amount: '$49.00',
-								},
-								{
-									id: '#ORD-7720',
-									student: 'Marcus Chen',
-									course: 'Enterprise Architecture 101',
-									amount: '$129.00',
-								},
-								{
-									id: '#ORD-7719',
-									student: 'Sarah Smith',
-									course: 'UX Design Fundamentals',
-									amount: '$89.00',
-								},
-								{
-									id: '#ORD-7718',
-									student: 'Alex Johnson',
-									course: 'Data Science Bootcamp',
-									amount: '$299.00',
-								},
-								{
-									id: '#ORD-7717',
-									student: 'Priya Patel',
-									course: 'React for Beginners',
-									amount: '$59.00',
-								},
-							].map((row, idx, arr) => (
-								<div
-									key={row.id}
-									className={clsx(
-										'grid grid-cols-12 items-center bg-white px-4 py-4 text-sm',
-										idx !== arr.length - 1 && 'border-b border-slate-200',
-									)}
-								>
-									<div className='col-span-3 font-bold text-blue-600'>
-										{row.id}
-									</div>
-									<div className='col-span-3 font-bold text-slate-900'>
-										{row.student}
-									</div>
-									<div className='col-span-4 truncate font-semibold text-slate-500'>
-										{row.course}
-									</div>
-									<div className='col-span-2 text-right font-bold text-slate-900'>
-										{row.amount}
-									</div>
+							{ordersLoading && (
+								<div className='flex items-center gap-2 bg-white px-4 py-4 text-sm font-bold text-slate-600'>
+									<FiLoader className='animate-spin' />
+									Loading recent orders...
 								</div>
-							))}
+							)}
+
+							{!ordersLoading && ordersError && (
+								<div className='bg-white px-4 py-4 text-sm font-bold text-rose-700'>
+									{ordersError}
+								</div>
+							)}
+
+							{!ordersLoading &&
+								!ordersError &&
+								recentOrderRows.length === 0 && (
+									<div className='bg-white px-4 py-6 text-sm font-bold text-slate-600'>
+										No orders yet.
+									</div>
+								)}
+
+							{!ordersLoading &&
+								!ordersError &&
+								recentOrderRows.map((row, idx, arr) => (
+									<div
+										key={row.id}
+										className={clsx(
+											'grid grid-cols-12 items-center bg-white px-4 py-4 text-sm',
+											idx !== arr.length - 1 && 'border-b border-slate-200',
+										)}
+									>
+										<Link
+											href={`/admin/orders/${row.rawId}`}
+											className='col-span-3 font-bold text-blue-600 hover:text-blue-700'
+											title={`Created ${row.createdLabel}`}
+										>
+											{row.id}
+										</Link>
+										<div
+											className='col-span-3 truncate font-bold text-slate-900'
+											title={row.email}
+										>
+											{row.email}
+										</div>
+										<div
+											className='col-span-4 truncate font-semibold text-slate-500'
+											title={row.course}
+										>
+											{row.course}
+										</div>
+										<div className='col-span-2 text-right font-bold text-slate-900'>
+											{row.amount}
+										</div>
+									</div>
+								))}
 						</div>
 					</CardShell>
 				</div>
@@ -275,72 +516,7 @@ export default function AdminDashboardPage() {
 				{/* Right column */}
 				<div className='lg:col-span-4'>
 					<div className='space-y-6'>
-						{/* Enrollment Errors */}
-						<div className='rounded-2xl border border-slate-200 bg-white shadow-sm'>
-							<div className='flex items-center justify-between border-b border-slate-200 px-5 py-4'>
-								<div className='flex items-center gap-2 text-sm font-extrabold text-rose-600'>
-									<FiAlertTriangle />
-									Enrollment Errors
-								</div>
-								<span className='inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-rose-100 px-2 text-xs font-extrabold text-rose-700'>
-									3
-								</span>
-							</div>
-
-							<div className='space-y-4 p-5'>
-								<div className='rounded-xl border border-slate-200 bg-white p-4'>
-									<div className='flex items-start justify-between gap-3'>
-										<div>
-											<div className='text-sm font-extrabold text-slate-900'>
-												Moodle Timeout
-											</div>
-											<div className='mt-1 text-xs font-semibold text-slate-500'>
-												User ID: 442 • Course: Advanced Python
-											</div>
-										</div>
-										<div className='text-xs font-bold text-slate-400'>
-											10m ago
-										</div>
-									</div>
-
-									<div className='mt-3 flex gap-2'>
-										<button className='flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 hover:bg-slate-50'>
-											View Logs
-										</button>
-										<button className='flex-1 rounded-xl bg-primary px-3 py-2 text-xs font-extrabold text-white hover:bg-blue-700'>
-											Retry
-										</button>
-									</div>
-								</div>
-
-								<div className='rounded-xl border border-slate-200 bg-white p-4'>
-									<div className='flex items-start justify-between gap-3'>
-										<div>
-											<div className='text-sm font-extrabold text-slate-900'>
-												Payment Sync Failed
-											</div>
-											<div className='mt-1 text-xs font-semibold text-slate-500'>
-												Order: #7719 • Integration: Stripe
-											</div>
-										</div>
-										<div className='text-xs font-bold text-slate-400'>
-											1h ago
-										</div>
-									</div>
-
-									<div className='mt-3 flex gap-2'>
-										<button className='flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 hover:bg-slate-50'>
-											View Logs
-										</button>
-										<button className='flex-1 rounded-xl bg-primary px-3 py-2 text-xs font-extrabold text-white hover:bg-blue-700'>
-											Retry
-										</button>
-									</div>
-								</div>
-							</div>
-						</div>
-
-						{/* System Status */}
+						{/* System Status (UPDATED to use /integrations/status) */}
 						<div className='rounded-2xl border border-slate-200 bg-white shadow-sm'>
 							<div className='border-b border-slate-200 px-5 py-4'>
 								<div className='text-sm font-extrabold text-slate-900'>
@@ -349,70 +525,105 @@ export default function AdminDashboardPage() {
 							</div>
 
 							<div className='space-y-4 p-5'>
-								{[
-									{
-										name: 'Stripe',
-										sub: 'Payments processing',
-										status: 'Active',
-										active: true,
-										icon: <FiCheckCircle className='text-emerald-500' />,
-									},
-									{
-										name: 'Moodle LMS',
-										sub: 'Course content sync',
-										status: 'Active',
-										active: true,
-										icon: <FiCheckCircle className='text-emerald-500' />,
-									},
-									{
-										name: 'Mailchimp',
-										sub: 'Marketing automation',
-										status: 'Disconnected',
-										active: false,
-										icon: <FiCircle className='text-slate-300' />,
-									},
-								].map((s) => (
-									<div key={s.name} className='flex items-center gap-3'>
-										<div className='grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-slate-50'>
-											{s.icon}
-										</div>
-										<div className='min-w-0 flex-1'>
-											<div className='text-sm font-extrabold text-slate-900'>
-												{s.name}
-											</div>
-											<div className='text-xs font-semibold text-slate-500'>
-												{s.sub}
-											</div>
-										</div>
-										<div className='flex items-center gap-2'>
-											<span
-												className={clsx(
-													'h-2 w-2 rounded-full',
-													s.active ? 'bg-emerald-500' : 'bg-slate-300',
-												)}
-											/>
-											<div className='text-xs font-extrabold text-slate-500'>
-												{s.status}
-											</div>
-										</div>
+								{intLoading && (
+									<div className='flex items-center gap-2 text-sm font-bold text-slate-600'>
+										<FiLoader className='animate-spin' />
+										Loading integrations…
 									</div>
-								))}
+								)}
+
+								{!intLoading && intError && (
+									<div className='text-sm font-bold text-rose-700'>
+										{intError}
+									</div>
+								)}
+
+								{!intLoading && !intError && (
+									<>
+										{/* Stripe */}
+										<div className='flex items-center gap-3'>
+											<div className='grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-slate-50'>
+												<Image
+													src='/stripe-logo.png'
+													alt='Stripe'
+													width={40}
+													height={40}
+													className='p-1'
+												/>
+											</div>
+
+											<div className='min-w-0 flex-1'>
+												<div className='text-sm font-extrabold text-slate-900'>
+													Stripe
+												</div>
+												<div className='text-xs font-semibold text-slate-500'>
+													Payments processing
+												</div>
+											</div>
+
+											<div className='flex items-center gap-2'>
+												<StatusDot status={stripeStatus} />
+												<div className='text-xs font-extrabold text-slate-500'>
+													{stripeStatus === 'connected'
+														? 'Active'
+														: stripeStatus === 'pending'
+															? 'Pending'
+															: 'Disconnected'}
+												</div>
+											</div>
+										</div>
+
+										{/* Moodle */}
+										<div className='flex items-center gap-3'>
+											<div className='grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-slate-50'>
+												<Image
+													src='/moodle-logo.webp'
+													alt='Moodle'
+													width={40}
+													height={40}
+													className='p-1'
+												/>
+											</div>
+
+											<div className='min-w-0 flex-1'>
+												<div className='text-sm font-extrabold text-slate-900'>
+													Moodle LMS
+												</div>
+												<div className='text-xs font-semibold text-slate-500'>
+													Course content sync
+												</div>
+											</div>
+
+											<div className='flex items-center gap-2'>
+												<StatusDot status={moodleStatus} />
+												<div className='text-xs font-extrabold text-slate-500'>
+													{moodleStatus === 'connected'
+														? 'Active'
+														: moodleStatus === 'pending'
+															? 'Pending'
+															: 'Disconnected'}
+												</div>
+											</div>
+										</div>
+
+										{/* Quick links */}
+										<div className='pt-2'>
+											<Link
+												href='/admin/integrations'
+												className='text-xs font-bold text-blue-600 hover:text-blue-700'
+											>
+												Manage integrations →
+											</Link>
+										</div>
+									</>
+								)}
 							</div>
 						</div>
 					</div>
 				</div>
 			</div>
 
-			<CardShell title='Your session'>
-				<div className='mt-2 rounded-2xl border border-slate-200 bg-white p-4 text-sm'>
-					<div className='font-extrabold text-slate-900'>
-						{me?.email ?? '-'}
-					</div>
-					<div className='mt-1 text-xs font-semibold text-slate-500'>
-						role: {me?.role ?? '-'} • tenant_id: {me?.tenant_id ?? '-'}
-					</div>
-				</div>
-			</CardShell>
+			{/* Session card removed in your provided second version; add if you want */}
 		</main>
 	);
 }

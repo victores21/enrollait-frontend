@@ -5,6 +5,7 @@
 	--background-dark: #101622;
 	--foreground: #000;
 	--primary: #2b6cee;
+	--stripe: #533afe;
 }
 
 @theme inline {
@@ -13,6 +14,7 @@
 	--font-sans: var(--font-geist-sans);
 	--font-mono: var(--font-geist-mono);
 	--color-primary: var(--primary);
+	--color-stripe: var(--stripe);
 }
 /* 
 @media (prefers-color-scheme: dark) {

@@ -4,7 +4,7 @@ import { CourseContentAccordion } from '@/app/components/CourseContentAccordion'
 import CoursePurchaseCard from '@/app/components/CoursePurchaseCard';
 import { api, qs } from '@/lib/api/api';
 import { FiCheck } from 'react-icons/fi';
-import type { Category } from '@/app/types'; // adjust if needed
+import type { Category, IntegrationsStatusResponse } from '@/app/types'; // adjust if needed
 
 type PageProps = {
 	params: Promise<{ slug: string; id: string }>;
@@ -55,8 +55,15 @@ export default async function ProductPage({ params }: PageProps) {
 				include_related: true,
 				include_categories: true,
 			}),
-		{ cache: 'no-store' }
+		{ cache: 'no-store' },
 	);
+
+	const integrations = await api<IntegrationsStatusResponse>(
+		'/integrations/status',
+		{ cache: 'no-store' },
+	);
+
+	console.log('Integra', integrations);
 
 	const product = data.product;
 
@@ -193,6 +200,7 @@ export default async function ProductPage({ params }: PageProps) {
 								type: 'image',
 								src: product.image_url ?? '/placeholder.png',
 							}}
+							isStripeConfigured={integrations?.stripe?.configured}
 						/>
 					</aside>
 				</div>

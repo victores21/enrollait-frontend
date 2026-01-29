@@ -6,11 +6,11 @@ import {
 	EmbeddedCheckoutProvider,
 	EmbeddedCheckout,
 } from '@stripe/react-stripe-js';
-import { FiX } from 'react-icons/fi';
+import { FiArrowRight, FiX } from 'react-icons/fi';
 import { ProductForStripeCheckout } from '../types';
 
 const stripePromise = loadStripe(
-	process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
+	process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
 );
 
 type StripeButtonProps = {
@@ -25,10 +25,6 @@ type StripeButtonProps = {
 	// Optional: return URL override
 	returnUrl?: string;
 };
-
-type CreateSessionResponse =
-	| { ok: true; client_secret: string; id: string }
-	| { ok: false; message: string };
 
 export default function StripeButton({
 	product,
@@ -78,7 +74,7 @@ export default function StripeButton({
 			// const data = (await res.json()) as CreateSessionResponse;
 			console.log(
 				'LA URL A LLAMAR',
-				`${process.env.NEXT_PUBLIC_BACKEND_URL}/stripe/checkout/session`
+				`${process.env.NEXT_PUBLIC_BACKEND_URL}/stripe/checkout/session`,
 			);
 			const res = await fetch(
 				`${process.env.NEXT_PUBLIC_BACKEND_URL}/stripe/checkout/session`,
@@ -90,7 +86,7 @@ export default function StripeButton({
 						customer_email: customerEmail ?? null,
 						// return_url optional; backend will infer
 					}),
-				}
+				},
 			);
 			const data = await res.json();
 
@@ -125,11 +121,12 @@ export default function StripeButton({
 				onClick={onClickBuy}
 				disabled={loading || product.stock_status !== 'available'}
 				className={[
-					'inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-sm font-semibold text-white shadow-sm hover:opacity-95 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60',
+					'inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 text-sm font-semibold text-white shadow-sm hover:opacity-95 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-60 p-7 cursor-pointer',
 					className,
 				].join(' ')}
 			>
-				{loading ? 'Opening checkout…' : buttonLabel}
+				{loading ? 'Opening checkout…' : buttonLabel}{' '}
+				<FiArrowRight className='h-4 w-4' />
 			</button>
 
 			{/* Modal */}

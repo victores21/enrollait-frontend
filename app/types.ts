@@ -69,3 +69,19 @@ export type MeResponse = {
 	email: string;
 	role: string;
 };
+
+export type IntegrationsStatusResponse = {
+	ok: boolean;
+	tenant_id: number;
+	all_configured: boolean;
+	moodle: {
+		configured: boolean;
+		missing: string[];
+		moodle_url?: string | null;
+	};
+	stripe: {
+		configured: boolean;
+		missing: string[];
+		stripe_publishable_key?: string | null;
+	};
+};
