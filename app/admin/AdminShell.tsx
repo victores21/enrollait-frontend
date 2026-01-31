@@ -13,6 +13,8 @@ import {
 	FiChevronDown,
 	FiX,
 } from 'react-icons/fi';
+import { RiProgress6Line } from 'react-icons/ri';
+import OnboardingSetupGuide from '../components/OnboardingSetupGuide';
 
 type NavItem = {
 	label: string;
@@ -63,6 +65,14 @@ export default function AdminLayout({
 
 	const configNav: NavItem[] = useMemo(
 		() => [
+			{
+				label: 'Onboarding',
+				icon: <RiProgress6Line className='h-4 w-4' />,
+				badgeDot: false,
+				url: '/admin/setup',
+				active:
+					pathname === '/admin/setup' || pathname.startsWith('/admin/setup/'),
+			},
 			{
 				label: 'Integrations',
 				icon: <FiLink className='h-4 w-4' />,
@@ -246,6 +256,7 @@ export default function AdminLayout({
 
 				{children}
 			</div>
+			<OnboardingSetupGuide />
 		</div>
 	);
 }

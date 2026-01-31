@@ -325,8 +325,6 @@ export default function AdminMoodleIntegrationPage() {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
-						domain,
-						name,
 						moodle_url: moodleUrl.trim(),
 						token: token.trim(),
 					}),
